@@ -1,0 +1,122 @@
+# cargo-deny configuration for NEXUS security
+# See https://embarkstudios.github.io/cargo-deny/checks/index.html
+
+[graph]
+skip-tree = []
+
+[output]
+# Enable color output
+feature-depth = 1
+
+[advisories]
+# Vulnerability database configuration
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+version = 2
+
+# Warn on all vulnerabilities
+vulnerability = "warn"
+# Deny unmaintained crates
+unmaintained = "warn"
+# Warn on notices
+notice = "warn"
+# Warn on yanked crates
+yanked = "warn"
+
+# Ignore specific advisories (add as needed)
+ignore = [
+    # Example: "RUSTSEC-2021-0145", # Ignoring specific advisory
+]
+
+[licenses]
+# Only allow specific licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+]
+
+# Explicitly deny problematic licenses
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-1.0",
+    "AGPL-3.0",
+    "EUPL-1.1",
+    "EUPL-1.2",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "MPL-2.0",
+]
+
+# Confidence threshold for detecting licenses
+confidence-threshold = 0.8
+
+# License exceptions for specific crates
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+name = "webpki-roots"
+version = "*"
+
+[bans]
+# Deny multiple versions of the same crate
+multiple-versions = "warn"
+# Allow duplicate versions for these crates (common in the ecosystem)
+allow-multiple-versions = [
+    "bitflags",
+    "syn",
+    "quote",
+    "proc-macro2",
+    "windows-sys",
+    "windows_i686_gnu",
+    "windows_i686_msvc",
+    "windows_x86_64_gnu",
+    "windows_x86_64_msvc",
+]
+
+# Wildcards for version ranges
+wildcards = "warn"
+# Allow certain crates to use wildcards
+allow-wildcard-paths = true
+
+# Deny specific crates
+deny = [
+    # Deny known vulnerable or problematic crates
+    { name = "openssl", version = "*" }, # Prefer rustls
+    { name = "native-tls", version = "*" }, # Prefer rustls  
+    { name = "time", version = "<0.3" }, # Known vulnerabilities in old versions
+]
+
+# Skip certain crates from analysis
+skip = []
+
+# Skip dependencies of certain crates
+skip-tree = []
+
+[sources]
+# Ensure all crates come from trusted sources
+unknown-registry = "deny"
+unknown-git = "deny"
+
+# Allow crates.io and git sources
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+# Allow specific git repositories
+[[sources.allow-org-repos]]
+org = "tokio-rs"
+repos = ["tokio", "tracing"]
+
+[[sources.allow-org-repos]]
+org = "serde-rs"
+repos = ["serde", "json"]
+
+[[sources.allow-org-repos]]
+org = "clap-rs"
+repos = ["clap"]
