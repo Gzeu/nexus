@@ -26,6 +26,7 @@ thiserror = "1.0"
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+toml = "0.8"
 
 # CLI
 clap = { version = "4.0", features = ["derive"] }
@@ -34,11 +35,25 @@ clap = { version = "4.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 
+# Security dependencies
+regex = "1.10"
+rand = "0.8"
+sha2 = "0.10"
+argon2 = "0.5"
+aes-gcm = "0.10"
+base64 = "0.22"
+secrecy = "0.8"
+zeroize = "1.7"
+
 # Plugin system
 libloading = "0.8"
 
 # Colors for CLI
 termcolor = "1.4"
+
+# Optional Web3 support
+alloy = { version = "0.2", optional = true }
+alloy-primitives = { version = "0.7", optional = true }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
