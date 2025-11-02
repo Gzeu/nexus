@@ -6,10 +6,49 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Core functionality for NEXUS - The Living Terminal"
 
 [dependencies]
-# No external dependencies needed for basic trait definition
-# async-trait and tokio will be added in later steps
+# Async runtime
+tokio.workspace = true
+async-trait.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Security dependencies
+regex = "1.10"
+rand = "0.8"
+sha2 = "0.10"
+argon2 = "0.5"
+aes-gcm = "0.10"
+base64 = "0.22"
+secrecy = "0.8"
+zeroize = "1.7"
+
+# Plugin system
+libloading.workspace = true
+
+# Optional Web3 support
+alloy = { version = "0.2", optional = true }
+alloy-primitives = { version = "0.7", optional = true }
+
+[features]
+default = ["security"]
+security = []
+web3 = ["alloy", "alloy-primitives"]
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
 
 [lints]
 workspace = true
