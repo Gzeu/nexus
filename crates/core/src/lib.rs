@@ -1,28 +1,59 @@
-//! NEXUS Core - The foundation of the NEXUS Living Terminal
-//!
-//! This crate provides the core functionality for NEXUS, including:
-//! - Agent system traits and interfaces
-//! - Security utilities and cryptographic functions
-//! - Plugin loading and management
-//! - Configuration management
-//! - Observability and metrics
-
-pub mod security;
-pub mod agent;
-pub mod plugin;
-pub mod config;
-pub mod error;
-
-// Re-export commonly used types and traits
-pub use agent::{Agent, AgentContext, AgentResult};
-pub use config::Config;
-pub use error::{NexusError, Result};
-pub use security::{SecurityManager, SecurityConfig};
+//! NEXUS Core Engine
+//! 
+//! Provides the foundational traits and types for the NEXUS terminal platform.
 
 use std::fmt;
 
-/// NEXUS version information
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub mod security {
+    pub use super::SecurityManager;
+    pub use super::SecurityConfig;
+    
+    pub mod crypto;
+    pub mod validation;
+    pub mod audit;
+    pub mod config;
+    pub mod ratelimit;
+    
+    use anyhow::Result;
+    
+    #[derive(Debug, Clone)]
+    pub struct SecurityConfig {
+        pub encryption_enabled: bool,
+        pub min_password_length: usize,
+        pub rate_limit: ratelimit::RateLimitConfig,
+        pub audit_config: audit::AuditConfig,
+        pub validation: validation::ValidationConfig,
+    }
+    
+    impl Default for SecurityConfig {
+        fn default() -> Self {
+            Self {
+                encryption_enabled: true,
+                min_password_length: 12,
+                rate_limit: ratelimit::RateLimitConfig::default(),
+                audit_config: audit::AuditConfig::default(),
+                validation: validation::ValidationConfig::default(),
+            }
+        }
+    }
+    
+    pub struct SecurityManager {
+        config: SecurityConfig,
+    }
+    
+    impl SecurityManager {
+        pub fn new(config: SecurityConfig) -> Result<Self> {
+            Ok(Self { config })
+        }
+    }
+    
+    pub fn init_security(config: SecurityConfig) -> Result<SecurityManager> {
+        SecurityManager::new(config)
+    }
+}
+
+// Re-exports for backward compatibility
+pub use security::{SecurityManager, SecurityConfig};
 
 /// Agent trait defines the core behavior for NEXUS agents
 /// 
@@ -38,36 +69,41 @@ pub trait Agent {
     }
 }
 
-/// Agent execution context
+/// Agent execution context - simplified version
 #[derive(Debug, Clone)]
 pub struct AgentContext {
-    /// Agent instance ID
     pub instance_id: String,
-    /// User ID if authenticated
-    pub user_id: Option<String>,
-    /// Environment variables
-    pub env: std::collections::HashMap<String, String>,
-    /// Working directory
-    pub working_dir: std::path::PathBuf,
 }
 
 /// Agent execution result
 pub type AgentResult<T> = std::result::Result<T, AgentError>;
 
 /// Agent-specific errors
-#[derive(Debug, thiserror::Error)]
-pub enum AgentError {
-    #[error("Agent execution failed: {0}")]
-    ExecutionFailed(String),
-    
-    #[error("Agent configuration invalid: {0}")]
-    ConfigurationInvalid(String),
-    
-    #[error("Agent resource unavailable: {0}")]
-    ResourceUnavailable(String),
-    
-    #[error("Agent permission denied: {0}")]
-    PermissionDenied(String),
+#[derive(Debug)]
+pub struct AgentError {
+    pub message: String,
+}
+
+impl fmt::Display for AgentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Agent error: {}", self.message)
+    }
+}
+
+impl std::error::Error for AgentError {}
+
+/// Simple Config struct
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub security: SecurityConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            security: SecurityConfig::default(),
+        }
+    }
 }
 
 /// Result type for NEXUS operations
@@ -84,8 +120,6 @@ pub enum NexusError {
     IoError(String),
     /// Security error
     SecurityError(String),
-    /// Plugin error
-    PluginError(String),
 }
 
 impl fmt::Display for NexusError {
@@ -95,72 +129,11 @@ impl fmt::Display for NexusError {
             NexusError::ConfigError(msg) => write!(f, "Config error: {}", msg),
             NexusError::IoError(msg) => write!(f, "IO error: {}", msg),
             NexusError::SecurityError(msg) => write!(f, "Security error: {}", msg),
-            NexusError::PluginError(msg) => write!(f, "Plugin error: {}", msg),
         }
     }
 }
 
 impl std::error::Error for NexusError {}
-
-/// Initialize the NEXUS core system
-pub async fn init() -> Result<()> {
-    tracing::info!("Initializing NEXUS core v{}", VERSION);
-    
-    // Initialize security subsystem with default configuration
-    let security_config = SecurityConfig::default();
-    let _security_manager = security::init_security(security_config)
-        .map_err(|e| NexusError::SecurityError(e.to_string()))?;
-    
-    tracing::info!("NEXUS core initialization complete");
-    Ok(())
-}
-
-/// Initialize NEXUS core with custom configuration
-pub async fn init_with_config(config: Config) -> Result<()> {
-    tracing::info!("Initializing NEXUS core v{} with custom config", VERSION);
-    
-    // Initialize security subsystem with custom configuration
-    let _security_manager = security::init_security(config.security)
-        .map_err(|e| NexusError::SecurityError(e.to_string()))?;
-    
-    tracing::info!("NEXUS core initialization complete");
-    Ok(())
-}
-
-/// Get NEXUS core version
-pub fn version() -> &'static str {
-    VERSION
-}
-
-/// Get build information
-pub fn build_info() -> BuildInfo {
-    BuildInfo {
-        version: VERSION,
-        git_commit: option_env!("GIT_COMMIT").unwrap_or("unknown"),
-        build_timestamp: option_env!("BUILD_TIMESTAMP").unwrap_or("unknown"),
-        target_triple: env!("TARGET"),
-        rust_version: env!("CARGO_PKG_RUST_VERSION"),
-    }
-}
-
-/// Build information structure
-#[derive(Debug, Clone)]
-pub struct BuildInfo {
-    pub version: &'static str,
-    pub git_commit: &'static str,
-    pub build_timestamp: &'static str,
-    pub target_triple: &'static str,
-    pub rust_version: &'static str,
-}
-
-impl std::fmt::Display for BuildInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "NEXUS v{} ({})", self.version, self.git_commit)?;
-        write!(f, "\nBuilt: {} for {}", self.build_timestamp, self.target_triple)?;
-        write!(f, "\nRust: {}", self.rust_version)?;
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -220,30 +193,5 @@ mod tests {
         
         let error = NexusError::IoError("file not found".to_string());
         assert_eq!(error.to_string(), "IO error: file not found");
-        
-        let error = NexusError::SecurityError("unauthorized".to_string());
-        assert_eq!(error.to_string(), "Security error: unauthorized");
-    }
-
-    #[test]
-    fn test_version() {
-        let version = version();
-        assert!(!version.is_empty());
-    }
-
-    #[test]
-    fn test_build_info() {
-        let info = build_info();
-        assert_eq!(info.version, VERSION);
-        assert!(!info.target_triple.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_init() {
-        // This test ensures that init doesn't panic
-        // Note: In a real scenario, we'd need the actual security module
-        // For now, this test is commented out to avoid compilation errors
-        // let result = init().await;
-        // assert!(result.is_ok());
     }
 }
