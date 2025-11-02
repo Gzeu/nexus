@@ -4,61 +4,69 @@
 
 use std::fmt;
 
-pub mod security {
-    pub use super::SecurityManager;
-    pub use super::SecurityConfig;
-    
-    pub mod crypto;
-    pub mod validation;
-    pub mod audit;
-    pub mod config;
-    pub mod ratelimit;
-    
-    use anyhow::Result;
-    
-    #[derive(Debug, Clone)]
-    pub struct SecurityConfig {
-        pub encryption_enabled: bool,
-        pub min_password_length: usize,
-        pub rate_limit: ratelimit::RateLimitConfig,
-        pub audit_config: audit::AuditConfig,
-        pub validation: validation::ValidationConfig,
-    }
-    
-    impl Default for SecurityConfig {
-        fn default() -> Self {
-            Self {
-                encryption_enabled: true,
-                min_password_length: 12,
-                rate_limit: ratelimit::RateLimitConfig::default(),
-                audit_config: audit::AuditConfig::default(),
-                validation: validation::ValidationConfig::default(),
-            }
+// Basic security configuration
+#[derive(Debug, Clone)]
+pub struct SecurityConfig {
+    pub encryption_enabled: bool,
+    pub min_password_length: usize,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            encryption_enabled: true,
+            min_password_length: 12,
         }
-    }
-    
-    pub struct SecurityManager {
-        config: SecurityConfig,
-    }
-    
-    impl SecurityManager {
-        pub fn new(config: SecurityConfig) -> Result<Self> {
-            Ok(Self { config })
-        }
-    }
-    
-    pub fn init_security(config: SecurityConfig) -> Result<SecurityManager> {
-        SecurityManager::new(config)
     }
 }
 
-// Re-exports for backward compatibility
-pub use security::{SecurityManager, SecurityConfig};
+// Basic security manager
+pub struct SecurityManager {
+    config: SecurityConfig,
+}
+
+impl SecurityManager {
+    pub fn new(config: SecurityConfig) -> anyhow::Result<Self> {
+        tracing::info!("Initializing security manager");
+        Ok(Self { config })
+    }
+    
+    pub fn validate_input(&self, input: &str, input_type: &str) -> anyhow::Result<()> {
+        // Basic validation
+        match input_type {
+            "email" if !input.contains('@') => {
+                return Err(anyhow::anyhow!("Invalid email format"));
+            }
+            "url" if !input.starts_with("http") => {
+                return Err(anyhow::anyhow!("Invalid URL format"));
+            }
+            _ => {}
+        }
+        
+        Ok(())
+    }
+}
+
+/// Initialize security subsystem
+pub fn init_security(config: SecurityConfig) -> anyhow::Result<SecurityManager> {
+    SecurityManager::new(config)
+}
+
+/// Simple Config struct
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub security: SecurityConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            security: SecurityConfig::default(),
+        }
+    }
+}
 
 /// Agent trait defines the core behavior for NEXUS agents
-/// 
-/// Agents are autonomous components that can perform tasks, respond to events,
-/// and interact with the terminal environment.
 pub trait Agent {
     /// Execute the agent's main logic and return a status message
     fn run(&self) -> String;
@@ -69,7 +77,7 @@ pub trait Agent {
     }
 }
 
-/// Agent execution context - simplified version
+/// Agent execution context
 #[derive(Debug, Clone)]
 pub struct AgentContext {
     pub instance_id: String,
@@ -91,20 +99,6 @@ impl fmt::Display for AgentError {
 }
 
 impl std::error::Error for AgentError {}
-
-/// Simple Config struct
-#[derive(Debug, Clone)]
-pub struct Config {
-    pub security: SecurityConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            security: SecurityConfig::default(),
-        }
-    }
-}
 
 /// Result type for NEXUS operations
 pub type Result<T> = std::result::Result<T, NexusError>;
@@ -193,5 +187,16 @@ mod tests {
         
         let error = NexusError::IoError("file not found".to_string());
         assert_eq!(error.to_string(), "IO error: file not found");
+    }
+    
+    #[test]
+    fn test_security_manager() {
+        let config = SecurityConfig::default();
+        let manager = init_security(config).unwrap();
+        
+        // Test basic validation
+        assert!(manager.validate_input("test@example.com", "email").is_ok());
+        assert!(manager.validate_input("https://example.com", "url").is_ok());
+        assert!(manager.validate_input("invalid-email", "email").is_err());
     }
 }
