@@ -1,12 +1,14 @@
 name: CI
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, edition-2024-migration ]
   pull_request:
     branches: [ main ]
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Minimum Rust version for 2024 edition
+  MSRV: '1.85.0'
 jobs:
   test:
     name: Test Suite
@@ -17,48 +19,76 @@ jobs:
           - stable
           - beta
           - nightly
+          - '1.85.0'  # MSRV for Rust 2024 edition
     steps:
     - name: Checkout sources
       uses: actions/checkout@v4
+    
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@v1
       with:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
+    
     - name: Cache cargo registry
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.rust }}-
+          ${{ runner.os }}-cargo-
+    
+    - name: Verify Rust 2024 edition compatibility
+      run: |
+        echo "Rust version: $(rustc --version)"
+        echo "Cargo version: $(cargo --version)"
+        rustc --version | grep -E '1\.(8[5-9]|9[0-9]|[1-9][0-9]{2})' || {
+          echo "Warning: Rust version may not fully support 2024 edition"
+        }
+    
     - name: Run cargo check
       run: cargo check --all --all-features
+    
     - name: Run cargo test
       run: cargo test --all --all-features
+    
     - name: Run rustfmt
       run: cargo fmt --all -- --check
+    
     - name: Run clippy
       run: cargo clippy --all --all-features -- -D warnings -A clippy::missing_errors_doc -A clippy::missing_panics_doc
+  
   build:
     name: Build Release
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
       uses: actions/checkout@v4
-    - name: Install Rust toolchain
+    
+    - name: Install Rust toolchain (stable)
       uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    
     - name: Cache cargo
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-release-
+          ${{ runner.os }}-cargo-
+    
     - name: Build
       run: cargo build --release --all --all-features
+    
     - name: Test CLI (if CLI crate exists)
       run: |
         if [ -d "crates/cli" ]; then
@@ -66,20 +96,65 @@ jobs:
         else
           echo "CLI crate not found, skipping CLI test"
         fi
+  
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
       uses: actions/checkout@v4
-    - name: Install Rust toolchain
+    
+    - name: Install Rust toolchain (stable 1.85+)
       uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+    
     - name: Install cargo-tarpaulin
       run: cargo install cargo-tarpaulin --locked
+    
     - name: Generate code coverage
       run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml --ignore-tests
+    
     - name: Upload to codecov.io
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
+  
+  # New job: Edition 2024 migration checks
+  edition-check:
+    name: Edition 2024 Compatibility
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout sources
+      uses: actions/checkout@v4
+    
+    - name: Install Rust 1.85.0 (minimum for 2024 edition)
+      uses: dtolnay/rust-toolchain@v1
+      with:
+        toolchain: '1.85.0'
+        components: rustfmt, clippy
+    
+    - name: Verify edition in Cargo.toml
+      run: |
+        if grep -q 'edition = "2024"' Cargo.toml; then
+          echo "✅ Rust 2024 edition detected"
+        else
+          echo "❌ Rust 2024 edition not found in Cargo.toml"
+          exit 1
+        fi
+    
+    - name: Check all crates compile with 2024 edition
+      run: cargo check --all --all-features
+    
+    - name: Run edition-specific lints
+      run: |
+        echo "Running Rust 2024 edition compatibility checks"
+        cargo clippy --all --all-features -- -W rust-2024-compatibility || true

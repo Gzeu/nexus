@@ -1,5 +1,7 @@
-# Rust formatting configuration
-edition = "2021"
+# Rust formatting configuration - 2024 Edition
+edition = "2024"  # Updated from 2021
+style_edition = "2021"  # Preserve 2021 formatting style for gradual migration
+
 max_width = 100
 hard_tabs = false
 tab_spaces = 4
